@@ -1,2 +1,2 @@
-# Migration-and-Crime-Analysis
-Analysis of Migration trends and Crime Analysis (Los Angeles County)
+# Immigration-and-Crime-Analysis
+Analysis of Immigration trends and Crime Analysis (Los Angeles County)
