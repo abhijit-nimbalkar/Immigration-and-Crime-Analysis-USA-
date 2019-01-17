@@ -1,0 +1,672 @@
+---
+title: "Immigrant and Crime Data Analysis"
+author: "Abhijit Nimbalkar,Adrienne Habiger"
+date: "December 13, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Adding Census Bureau key to repository
+```{r Adding_key_for_CB, echo=FALSE}
+Sys.setenv(CENSUS_KEY='4f2dd885106992806e2e20925c82f1d75cee81a0')
+library(censusapi)
+library(dplyr)
+library(tidyverse)
+library(rlist)
+library(RSocrata)
+library(rgdal)
+library(leaflet)
+library(plyr)
+library(plotly)
+library(olsrr)
+library(sp)
+library(ggplot2)
+library(maps)
+library(RColorBrewer)
+options(warn=-1)
+```
+
+## Loading datasets for Migration from 2010 to 2016
+```{r Loading_data_for_Migration, echo=FALSE}
+LA_council_districts<-read.csv("~/R/Project 15/Datasets/Council Districts.csv")
+
+immigrant_data_2016<-getCensus(name = "acs/acs5/subject",
+                            vintage = 2016,
+                               vars = c("NAME","group(S0701)"), 
+                             region = "tract:*", 
+                           regionin = "state:06+county:037") %>% select(tract,NAME,matches('S0701_C0[145]_.*E$')) %>% mutate_all(funs(ifelse(is.na(.), 0, .)))
+
+immigrant_data_2016$tract <- as.integer(immigrant_data_2016$tract)
+immigrant_data_2016<-left_join(LA_council_districts,immigrant_data_2016, by=c("CT10"="tract"), copy= TRUE) 
+
+
+immigrant_data_2015<-getCensus(name = "acs/acs5/subject",
+                            vintage = 2015,
+                               vars = c("NAME","group(S0701)"), 
+                             region = "tract:*", 
+                           regionin = "state:06+county:037") %>% select(tract,NAME,matches('S0701_C0[145]_.*E$')) %>% mutate_all(funs(ifelse(is.na(.), 0, .)))
+
+immigrant_data_2015$tract <- as.integer(immigrant_data_2015$tract)
+immigrant_data_2015 <-left_join(LA_council_districts,immigrant_data_2015, by=c("CT10"="tract"), copy= TRUE)
+
+immigrant_data_2014<-getCensus(name = "acs/acs5/subject",
+                            vintage = 2014,
+                               vars = c("NAME","group(S0701)"), 
+                             region = "tract:*", 
+                           regionin = "state:06+county:037") %>% select(tract,NAME,matches('S0701_C0[145]_.*E$')) %>% mutate_all(funs(ifelse(is.na(.), 0, .)))
+
+immigrant_data_2014$tract <- as.integer(immigrant_data_2014$tract)
+immigrant_data_2014 <-left_join(LA_council_districts,immigrant_data_2014, by=c("CT10"="tract"), copy= TRUE) 
+
+
+immigrant_data_2013<-getCensus(name = "acs/acs5/subject",
+                            vintage = 2013,
+                               vars = c("NAME","group(S0701)"), 
+                             region = "tract:*", 
+                           regionin = "state:06+county:037") %>% select(tract,NAME,matches('S0701_C0[145]_.*E$')) %>% mutate_all(funs(ifelse(is.na(.), 0, .)))
+
+immigrant_data_2013$tract <- as.integer(immigrant_data_2013$tract)
+immigrant_data_2013 <-left_join(LA_council_districts,immigrant_data_2013, by=c("CT10"="tract"), copy= TRUE)
+
+
+immigrant_data_2012<-getCensus(name = "acs/acs5/subject",
+                            vintage = 2012,
+                               vars = c("NAME","group(S0701)"), 
+                             region = "tract:*", 
+                           regionin = "state:06+county:037") %>% select(tract,NAME,matches('S0701_C0[145]_.*E$')) %>% mutate_all(funs(ifelse(is.na(.), 0, .)))
+
+immigrant_data_2012$tract <- as.integer(immigrant_data_2012$tract)
+immigrant_data_2012 <-left_join(LA_council_districts,immigrant_data_2012, by=c("CT10"="tract"), copy= TRUE)
+
+
+immigrant_data_2011<-getCensus(name = "acs/acs5/subject",
+                            vintage = 2011,
+                               vars = c("NAME","group(S0701)"), 
+                             region = "tract:*", 
+                           regionin = "state:06+county:037") %>% select(tract,NAME,matches('S0701_C0[145]_.*E$')) %>% mutate_all(funs(ifelse(is.na(.), 0, .)))
+
+immigrant_data_2011$tract <- as.integer(immigrant_data_2011$tract)
+immigrant_data_2011 <-left_join(LA_council_districts,immigrant_data_2011, by=c("CT10"="tract"), copy= TRUE)
+
+
+immigrant_data_2010<-getCensus(name = "acs/acs5/subject",
+                            vintage = 2010,
+                               vars = c("NAME","group(S0701)"), 
+                             region = "tract:*", 
+                           regionin = "state:06+county:037") %>% select(tract,NAME,matches('S0701_C0[145]_.*E$')) %>% mutate_all(funs(ifelse(is.na(.), 0, .)))
+
+immigrant_data_2010$tract <- as.integer(immigrant_data_2010$tract)
+immigrant_data_2010 <-left_join(LA_council_districts,immigrant_data_2010, by=c("CT10"="tract"), copy= TRUE)
+
+```
+
+## Cleaning the Immigrant dataset and trend
+```{r Analysing_datasets, echo=FALSE}
+calculate_immigrant_in_df<-function(df){
+ for (i in c(1:56)){
+   if (i < 10){
+      col_no_1_var<-paste0('S0701_C0','1_','00',i,'E')
+      col_no_4_var<-paste0('S0701_C0','4_','00',i,'E')
+      col_no_5_var<-paste0('S0701_C0','5_','00',i,'E')
+   }else{
+      col_no_1_var<-paste0('S0701_C0','1_','0',i,'E')
+      col_no_4_var<-paste0('S0701_C0','4_','0',i,'E')
+      col_no_5_var<-paste0('S0701_C0','5_','0',i,'E')     
+   }
+   df[[col_no_4_var]] <- round((df[[col_no_4_var]]/100)*df[[col_no_1_var]])
+   df[[col_no_5_var]] <- round((df[[col_no_5_var]]/100)*df[[col_no_1_var]])
+ }
+ return(df)
+}
+
+immigrant_data_2010<-calculate_immigrant_in_df(immigrant_data_2010)
+immigrant_data_2011<-calculate_immigrant_in_df(immigrant_data_2011)
+immigrant_data_2012<-calculate_immigrant_in_df(immigrant_data_2012)
+immigrant_data_2013<-calculate_immigrant_in_df(immigrant_data_2013)
+immigrant_data_2014<-calculate_immigrant_in_df(immigrant_data_2014)
+immigrant_data_2015<-calculate_immigrant_in_df(immigrant_data_2015)
+immigrant_data_2016<-calculate_immigrant_in_df(immigrant_data_2016)
+
+immigrant.all.years <- list(immigrant_data_2010,immigrant_data_2011,immigrant_data_2012,immigrant_data_2013,immigrant_data_2014,immigrant_data_2015,immigrant_data_2016)
+```
+
+##Importing data for crime
+```{r Importing_data_for_crime, echo=FALSE}
+crime_data_2010<-read.csv("~/R/Project 15/Datasets/CrimeData/CrimeDataDistrict_2010.csv")
+crime_data_2011<-read.csv("~/R/Project 15/Datasets/CrimeData/CrimeDataDistrict_2011.csv")
+crime_data_2012<-read.csv("~/R/Project 15/Datasets/CrimeData/CrimeDataDistrict_2012.csv")
+crime_data_2013<-read.csv("~/R/Project 15/Datasets/CrimeData/CrimeDataDistrict_2013.csv")
+crime_data_2014<-read.csv("~/R/Project 15/Datasets/CrimeData/CrimeDataDistrict_2014.csv")
+crime_data_2015<-read.csv("~/R/Project 15/Datasets/CrimeData/CrimeDataDistrict_2015.csv")
+crime_data_2016<-read.csv("~/R/Project 15/Datasets/CrimeData/CrimeDataDistrict_2016.csv")
+
+crime.all.years<-list(crime_data_2010,crime_data_2011,crime_data_2012,crime_data_2013,crime_data_2014,crime_data_2015,crime_data_2016)
+```
+
+##Variable declaration and calculation of Immigrant data 
+```{r immigrant_data_analysis, echo=FALSE}
+overall_names_age<-c('Age',   'age_state','age_abroad')
+age_1to4<-  c('S0701_C01_002E','S0701_C04_002E','S0701_C05_002E')
+names(age_1to4)<-overall_names_age
+age_5to17<- c('S0701_C01_003E','S0701_C04_003E','S0701_C05_003E') 
+names(age_5to17)<-overall_names_age
+age_18to24<-c('S0701_C01_004E','S0701_C04_004E','S0701_C05_004E')
+names(age_18to24)<-overall_names_age
+age_25to34<-c('S0701_C01_005E','S0701_C04_005E','S0701_C05_005E')
+names(age_25to34)<-overall_names_age
+age_35to44<-c('S0701_C01_006E','S0701_C04_006E','S0701_C05_006E')
+names(age_35to44)<-overall_names_age
+age_45to54<-c('S0701_C01_007E','S0701_C04_007E','S0701_C05_007E')
+names(age_45to54)<-overall_names_age
+age_55to64<-c('S0701_C01_008E','S0701_C04_008E','S0701_C05_008E')
+names(age_55to64)<-overall_names_age
+age_65to74<-c('S0701_C01_009E','S0701_C04_009E','S0701_C05_009E')
+names(age_65to74)<-overall_names_age
+age_75toabove<-c('S0701_C01_010E','S0701_C04_010E','S0701_C05_010E')
+names(age_75toabove)<-overall_names_age
+
+age_vector_diff_state<-c(age_1to4[2],age_5to17[2],age_18to24[2],age_25to34[2],age_35to44[2],age_45to54[2],age_55to64[2],age_65to74[2],age_75toabove[2])
+age_vector_abroad<-c(age_1to4[3],age_5to17[3],age_18to24[3],age_25to34[3],age_35to44[3],age_45to54[3],age_55to64[3],age_65to74[3],age_75toabove[3])
+
+overall_names_sex<-c('sex',   'sex_state','sex_abroad')
+sex_male<-c('S0701_C01_012E','S0701_C04_012E','S0701_C05_012E')
+names(sex_male)<-overall_names_sex
+sex_female<-c('S0701_C01_013E','S0701_C04_013E','S0701_C05_013E')
+names(sex_female)<-overall_names_sex
+
+overall_names_race<-c('race',   'race_state','race_abroad')
+race_white<-c('S0701_C01_015E','S0701_C04_015E','S0701_C05_015E')
+names(race_white)<-c('race_white',   'race_state_white','race_abroad_white')
+race_blackorafrican<-c('S0701_C01_016E','S0701_C04_016E','S0701_C05_016E')
+names(race_blackorafrican)<-c('race_black',   'race_state_black','race_abroad_black')
+race_asian<-c('S0701_C01_018E','S0701_C04_018E','S0701_C05_018E')
+names(race_asian)<-c('race_asian',   'race_state_asian','race_abroad_asian')
+race_hispoandlatino<-c('S0701_C01_022E','S0701_C04_022E','S0701_C05_022E')
+names(race_hispoandlatino)<-c('race_hispanic',   'race_state_hispanic','race_abroad_hispanic')
+race_whitealone<-c('S0701_C01_023E','S0701_C04_023E','S0701_C05_023E')
+race_whitealone<-overall_names_race
+race_otherraces<-c('S0701_C01_020E','S0701_C04_020E','S0701_C05_020E')
+race_otherraces<-overall_names_race
+
+overall_names_citizen<-c('citizen',   'citizen_state','citizen_abroad')
+citizen_native_immigrant<-c('S0701_C01_024E','S0701_C04_024E','S0701_C05_024E')
+names(citizen_native_immigrant)<-overall_names_citizen
+citizen_foreign_born_US_citizen<-c('S0701_C01_026E','S0701_C04_026E','S0701_C05_026E')
+names(citizen_foreign_born_US_citizen)<-overall_names_citizen
+citizen_foreign_born_NotUS_citizen<-c('S0701_C01_027E','S0701_C04_027E','S0701_C05_027E')
+names(citizen_foreign_born_NotUS_citizen)<-overall_names_citizen
+
+overall_names_education<-c('education',   'education_state','education_abroad')
+education_high_school_graduates<-c('S0701_C01_035E','S0701_C04_035E','S0701_C05_035E')
+names(education_high_school_graduates)<-c('education_high',   'education_state_high','education_abroad_high')
+education_some_college_degree<-c('S0701_C01_036E','S0701_C04_036E','S0701_C05_036E')
+names(education_some_college_degree)<-c('education_college',   'education_state_college','education_abroad_college')
+education_bachelor_degree<-c('S0701_C01_037E','S0701_C04_037E','S0701_C05_037E')
+names(education_bachelor_degree)<-c('education_bachelor',   'education_state_bachelor','education_abroad_bachelor')
+education_graduate_degree<-c('S0701_C01_038E','S0701_C04_038E','S0701_C05_038E')
+names(education_graduate_degree)<-c('education_graduate',   'education_state_graduate','education_abroad_graduate')
+
+overall_names_poverty<-c('poverty',   'poverty_state','poverty_abroad')
+poverty_below_100<-c('S0701_C01_050E','S0701_C04_050E','S0701_C05_050E')
+names(poverty_below_100)<-c('poverty_below100',   'poverty_state_below100','poverty_abroad_below100')
+poverty_100to149<-c('S0701_C01_051E','S0701_C04_051E','S0701_C05_051E')
+names(poverty_100to149)<-c('poverty_100to149',   'poverty_state_100to149','poverty_abroad_100to149')
+poverty_150above<-c('S0701_C01_052E','S0701_C04_052E','S0701_C05_052E')
+names(poverty_150above)<-c('poverty_above150',   'poverty_state_above150','poverty_abroad_above150')
+
+list_council_district_names<-c(immigrant_data_2010 %>% arrange(district) %>% group_by(district) %>% select(name) %>% distinct() %>% ungroup())
+
+```
+
+##Functions for operations for immigrant data
+```{r Functions_for_calculations, echo=FALSE}
+calculate_variable_year_wise<-function(immigrant_list,vector){
+  total<-0
+  for (value in immigrant_list){
+    total<-c(total,sum(colSums(value[vector],na.rm = TRUE)))
+  }
+  return (total)
+}
+
+calculate_variable_district_year_wise<-function(immigrant_list,vector,table="list"){
+  ldf<-list()
+  for (value in immigrant_list){
+    df<-value %>% group_by(district) %>% select(vector) %>% summarise_all(funs(sum))
+    ldf<-list.append(ldf,df)
+  }
+  if(table=="list"){
+   return (ldf) 
+  }else{
+    names(ldf)<-c('2010','2011','2012','2013','2014','2015','2016')
+    return(ldf)
+  }
+}
+
+calculate_variable_district_wise<-function(immigrant_list, vector, type="immigrant"){
+  if(type=='immigrant'){
+  year_wise_list<-calculate_variable_district_year_wise(immigrant_list,vector)
+  }else{
+    year_wise_list<-immigrant_list
+    }
+  district_list<-list()
+  for(j in c(1:15)){
+    total_col1<-0
+    total_col2<-0
+    for(i in c(1:length(year_wise_list))){
+      if(length(vector)==2){
+       total_col1<-total_col1+year_wise_list[[i]][j,2] 
+       total_col2<-total_col2+year_wise_list[[i]][j,3]
+      }else{
+         total_col1<-total_col1+year_wise_list[[i]][j,2]
+       }
+    }
+    if(length(vector)==2){
+     district_list<-list.append(district_list,c(total_col1,total_col2)) 
+    }else{
+      district_list<-list.append(district_list,total_col1) 
+    }
+  }
+  return(district_list)
+}
+
+xory_plotly<-function(list_to_convert){
+  axis_of_plot<-c()
+  for(i in c(1:length(list_to_convert))){
+    if(length(list_to_convert[[i]])==2){
+      axis_of_plot<-c(axis_of_plot,sum(list_to_convert[[i]][[2]],na.rm = TRUE))  
+    }else{
+      axis_of_plot<-c(axis_of_plot,sum(list_to_convert[[i]][[1]],na.rm = TRUE))
+    }
+  }
+  if(i>7){
+  return(cbind("DISTRICT"=as.factor(c(1:15)),as.data.frame(axis_of_plot)))
+  }else{
+    return(as.data.frame(axis_of_plot))
+  }
+}
+```
+
+##Functions for operations for crime data
+```{r operation_on_crime_data, echo=FALSE}
+crime_district_wise<-function(crime_list){
+  total_count<-list()
+  for(value in crime_list){
+    df<-value %>% group_by(district) %>% count("district")
+    total_count<-list.append(total_count,df)
+  }
+  names(total_count)<-c('2010','2011','2012','2013','2014','2015','2016')
+  return(total_count)
+}
+
+```
+
+##Plotting Immigrant trend year wise from 2010 to 2016 
+```{r plotting_immigrant_trend_diifState, echo=FALSE}
+result_to_plot_yearly_diff_state<-calculate_variable_district_year_wise(immigrant.all.years,c('S0701_C04_001E'))
+result_to_plot_yearly_abroad<-calculate_variable_district_year_wise(immigrant.all.years,c('S0701_C05_001E'))
+yaxis1<-xory_plotly(result_to_plot_yearly_diff_state)
+yaxis2<-xory_plotly(result_to_plot_yearly_abroad)
+yaxis3<-as.data.frame(c(nrow(crime_data_2010),nrow(crime_data_2011),nrow(crime_data_2012),nrow(crime_data_2013),nrow(crime_data_2014),nrow(crime_data_2015),nrow(crime_data_2016)))
+
+
+trace1 <- list(
+  x = c("2010", "2011", "2012", "2013", "2014", "2015", "2016"), 
+  y = yaxis1$axis_of_plot, 
+  connectgaps = TRUE, 
+  fillcolor = "rgba(0, 0, 255, 0.5)", 
+  line = list(
+    color = "rgb(0, 0, 255)", 
+    dash = "solid", 
+    shape = "linear", 
+    smoothing = 1, 
+    width = 2
+  ), 
+  marker = list(
+    cauto = TRUE, 
+    color = "rgb(0, 0, 255)", 
+    colorscale = list(c(0, "rgb(5, 10, 172)"),list(0.35, "rgb(106, 137, 247)"),list(0.5, "rgb(190,190,190)"),list(0.6, "rgb(220, 170, 132)"),list(0.7, "rgb(230, 145, 90)"),list(1, "rgb(178, 10, 28)")), 
+    line = list(
+      color = "rgb(217, 217, 217)", 
+      width = 0.5
+    ), 
+    maxdisplayed = 0, 
+    opacity = 1, 
+    size = 12, 
+    symbol = "circle"
+  ), 
+  mode = "lines", 
+  name = "Immigrant from Diff Statein the USA", 
+  opacity = 1, 
+  showlegend = TRUE, 
+  textfont = list(
+    color = "#444", 
+    family = "'Open sans', verdana, arial, sans-serif", 
+    size = 12
+  ), 
+  textposition = "middle center", 
+  type = "scatter", 
+  uid = "9be668", 
+  xsrc = "PewResearch:274:0849eb", 
+  ysrc = "PewResearch:274:c35251"
+)
+trace2 <- list(
+  x = c("2010", "2011", "2012", "2013", "2014", "2015", "2016"), 
+  y = yaxis2$axis_of_plot, 
+  fillcolor = "rgba(28, 69, 135, 0.5)", 
+  line = list(
+    color = "rgba(28, 69, 135, 0.6)", 
+    dash = "solid", 
+    shape = "linear", 
+    smoothing = 1, 
+    width = 2
+  ), 
+  marker = list(
+    cauto = TRUE, 
+    color = "rgba(28, 69, 135, 0.6)", 
+    colorscale = list(c(0, "rgb(5, 10, 172)"),list(0.35, "rgb(106, 137, 247)"),list(0.5, "rgb(190,190,190)"),list(0.6, "rgb(220, 170, 132)"),list(0.7, "rgb(230, 145, 90)"),list(1, "rgb(178, 10, 28)")), 
+    line = list(
+      color = "#444", 
+      width = 0
+    ), 
+    maxdisplayed = 0, 
+    opacity = 1, 
+    size = 6, 
+    symbol = "circle"
+  ), 
+  name = "Immigrant from Abroad", 
+  opacity = 0.8, 
+  showlegend = TRUE, 
+  textfont = list(
+    color = "#444", 
+    family = "'Open sans', verdana, arial, sans-serif", 
+    size = 12
+  ), 
+  textposition = "middle center", 
+  type = "scatter", 
+  uid = "e1dd27", 
+  xsrc = "PewResearch:274:0849eb", 
+  ysrc = "PewResearch:274:c54940"
+)
+trace3 <- list(
+  x = c("2010", "2011", "2012", "2013", "2014", "2015", "2016"), 
+  y = yaxis3$`c(nrow(crime_data_2010), nrow(crime_data_2011), nrow(crime_data_2012), nrow(crime_data_2013), nrow(crime_data_2014), nrow(crime_data_2015), nrow(crime_data_2016))`, 
+  fillcolor = "rgb(217, 217, 217)", 
+  line = list(
+    color = "rgb(67, 67, 67)", 
+    dash = "solid", 
+    shape = "linear", 
+    smoothing = 1, 
+    width = 0.5
+  ), 
+  marker = list(
+    cauto = TRUE, 
+    color = "rgb(67, 67, 67)", 
+    colorscale = list(c(0, "rgb(5, 10, 172)"),list(0.35, "rgb(106, 137, 247)"),list(0.5, "rgb(190,190,190)"),list(0.6, "rgb(220, 170, 132)"),list(0.7, "rgb(230, 145, 90)"),list(1, "rgb(178, 10, 28)")), 
+    line = list(
+      color = "#444", 
+      width = 0
+    ), 
+    maxdisplayed = 0, 
+    opacity = 1, 
+    size = 6, 
+    symbol = "circle"
+  ), 
+  name = "Crime Pattern", 
+  opacity = 1, 
+  showlegend = TRUE, 
+  textfont = list(
+    color = "#444", 
+    family = "'Open sans', verdana, arial, sans-serif", 
+    size = 12
+  ), 
+  textposition = "middle center", 
+  type = "scatter", 
+  uid = "f36e0d", 
+  xsrc = "PewResearch:274:0849eb", 
+  ysrc = "PewResearch:274:cd587a"
+)
+
+p <- plot_ly()
+p <- add_trace(p, x=trace1$x, y=trace1$y, connectgaps=trace1$connectgaps, fillcolor=trace1$fillcolor, line=trace1$line, marker=trace1$marker, mode=trace1$mode, name=trace1$name, opacity=trace1$opacity, showlegend=trace1$showlegend, textfont=trace1$textfont, textposition=trace1$textposition, type=trace1$type, uid=trace1$uid, xsrc=trace1$xsrc, ysrc=trace1$ysrc)
+p <- add_trace(p, x=trace2$x, y=trace2$y, fillcolor=trace2$fillcolor, line=trace2$line, marker=trace2$marker, name=trace2$name, opacity=trace2$opacity, showlegend=trace2$showlegend, textfont=trace2$textfont, textposition=trace2$textposition, type=trace2$type, uid=trace2$uid, xsrc=trace2$xsrc, ysrc=trace2$ysrc)
+p <- add_trace(p, x=trace3$x, y=trace3$y, fillcolor=trace3$fillcolor, line=trace3$line, marker=trace3$marker, name=trace3$name, opacity=trace3$opacity, showlegend=trace3$showlegend, textfont=trace3$textfont, textposition=trace3$textposition, type=trace3$type, uid=trace3$uid, xsrc=trace3$xsrc, ysrc=trace3$ysrc)
+p
+```
+##plotting immigrant trend council district wise
+```{r plotting_immigrant_trent_CD, echo=FALSE}
+results_to_plot_district_diff_state<-calculate_variable_district_wise(immigrant.all.years,c('S0701_C04_001E'))
+results_to_plot_district_abroad<-calculate_variable_district_wise(immigrant.all.years,c('S0701_C05_001E'))
+result_to_plot_district_crime<-calculate_variable_district_wise(crime_district_wise(crime.all.years),vector = c('district'),type = 'crime')
+
+yaxis_district1<-xory_plotly(results_to_plot_district_diff_state)
+yaxis_district2<-xory_plotly(results_to_plot_district_abroad)
+yaxis_district3<-xory_plotly(result_to_plot_district_crime)
+
+data_to_plot<-cbind(as.data.frame(list_council_district_names[2]),yaxis_district1$axis_of_plot,yaxis_district2$axis_of_plot,as.data.frame(yaxis_district3$axis_of_plot)) 
+
+names(data_to_plot)<-c('V1','V2','V3','V4')
+p <- plot_ly(data_to_plot, x = ~V1, y = ~V2, type = 'bar', name = 'From Different State') %>% add_trace(y = ~V3, name = 'From Abroad') %>% add_trace(y = ~V4, name = 'Crime_Data') %>%
+  layout(yaxis = list(title = 'Count'), barmode = 'group')
+p
+```
+
+##statastical analysis
+```{r Statistical_Analysis, echo=FALSE}
+crime_data_y<-xory_plotly(calculate_variable_district_wise(crime_district_wise(crime.all.years),vector = c('district'),type = 'crime'))
+
+calculate_variable<-function(variable_to_calculate){
+  list_to_return<-xory_plotly(calculate_variable_district_wise(immigrant.all.years,variable_to_calculate))
+  return (as.data.frame(list_to_return))
+}
+
+calculate_multiple_regression<-function(list_of_variables){
+  
+}
+
+
+hispanic_state_immigrant<-calculate_variable(race_hispoandlatino[2])
+hispanic_abroad_immigrant<-calculate_variable(race_hispoandlatino[3])
+white_state_immigrant<-calculate_variable(race_white[2])
+white_abroad_immigrant<-calculate_variable(race_white[2])
+asian_state_immigrant<-calculate_variable(race_asian[2])
+asian_abroad_immigrant<-calculate_variable(race_asian[3])
+blackAfrican_state_immigran<-calculate_variable(race_blackorafrican[2])
+blackAfrican_abroad_immigran<-calculate_variable(race_blackorafrican[3])
+
+race_state_immigrant<-cbind(hispanic_state_immigrant,white_state_immigrant,asian_state_immigrant,blackAfrican_state_immigran)
+names(race_state_immigrant)<-c('Hispanicandlatino','White','Asian','BlackandAfrican')
+race_abroad_immigrant<-cbind(hispanic_abroad_immigrant,white_abroad_immigrant,asian_abroad_immigrant,blackAfrican_abroad_immigran)
+names(race_abroad_immigrant)<-c('Hispanicandlatino','White','Asian','BlackandAfrican')
+
+highschool_graduate_state_immigrant<-calculate_variable(education_high_school_graduates[2])
+highschool_graduate_abroad_immigrant<-calculate_variable(education_high_school_graduates[3])
+some_college_degree_state_immigrant<-calculate_variable(education_some_college_degree[2])
+some_college_degree_abroad_immigrant<-calculate_variable(education_some_college_degree[3])
+bachelor_degree_state_immigrant<-calculate_variable(education_bachelor_degree[2])
+bachelor_degree_abroad_immigrant<-calculate_variable(education_bachelor_degree[3])
+graduate_degree_state_immigratn<-calculate_variable(education_graduate_degree[2])
+graduate_degree_abroad_immigratn<-calculate_variable(education_graduate_degree[3])
+
+education_state_immigrant<-cbind(highschool_graduate_state_immigrant,some_college_degree_state_immigrant,bachelor_degree_state_immigrant,graduate_degree_state_immigratn)
+names(education_state_immigrant)<-c('High School','Some College','Bachelor','Graduate')
+
+education_abroad_immigrant<-cbind(highschool_graduate_abroad_immigrant,some_college_degree_abroad_immigrant,bachelor_degree_abroad_immigrant,graduate_degree_abroad_immigratn)
+names(education_abroad_immigrant)<-c('High School','Some College','Bachelor','Graduate')
+
+poverty_below_100_state_immigrant<-calculate_variable(poverty_below_100[2])
+poverty_below_100_abroad_immigrant<-calculate_variable(poverty_below_100[3])
+poverty_100to149_state_immigrant<-calculate_variable(poverty_100to149[2])
+poverty_100to149_abroad_immigrant<-calculate_variable(poverty_100to149[3])
+poverty_150above_state_immigrant<-calculate_variable(poverty_150above[2])
+poverty_150above_abroad_immigrant<-calculate_variable(poverty_150above[3])
+
+poverty_state_immigrant<-cbind(poverty_below_100_state_immigrant,poverty_100to149_state_immigrant,poverty_150above_state_immigrant)
+names(poverty_state_immigrant)<-c('Below 100','100 to 149','150 and above')
+
+poverty_abroad_immigrant<-cbind(poverty_below_100_abroad_immigrant,poverty_100to149_abroad_immigrant,poverty_150above_abroad_immigrant)
+names(poverty_state_immigrant)<-c('Below 100','100 to 149','150 and above')
+
+```
+
+```{r drawing_maps, echo=FALSE}
+districts <- readOGR("~/R/Project 15/Datasets/ShapeFile/CnclDist_July2012.shp")
+districts <-spTransform(districts, CRS("+proj=longlat +datum=WGS84 +no_defs"))
+data_to_plot<-merge(districts,yaxis_district1,by="DISTRICT")
+
+bins <- c(0, 5000, 10000, 11000, 12000, 20000, 30000, 40000, Inf)
+pal <- colorBin("YlOrRd", domain = data_to_plot$axis_of_plot, bins = bins)
+
+labels <- sprintf(
+  "<strong>%s</strong><br/>%g people / mi<sup>2</sup>",
+  data_to_plot$DISTRICT, data_to_plot$axis_of_plot
+) %>% lapply(htmltools::HTML)
+
+
+m<-leaflet(data=data_to_plot) %>% addProviderTiles(providers$CartoDB.DarkMatter) %>% setView(-118.387990,34.145223,zoom=10) %>% addPolygons(fillColor = ~pal(axis_of_plot), weight = 2, opacity = 1, color = "white", dashArray = "3", fillOpacity = 0.7, highlight = highlightOptions(
+    weight = 5,
+    color = "#666",
+    dashArray = "",
+    fillOpacity = 0.7,
+    bringToFront = TRUE),
+    label = labels,
+  labelOptions = labelOptions(
+    style = list("font-weight" = "normal", padding = "3px 8px"),
+    textsize = "15px",
+    direction = "auto"))
+
+m %>% addLegend(pal = pal, values = ~axis_of_plot, opacity = 0.7, title = NULL,
+  position = "bottomright")
+
+m
+
+```
+
+##Saving data to file for mapping
+```{r saving_data_to_file,echo=FALSE}
+library(qdapTools)
+varibles_for_mapping<-c(race_white[2:3],race_blackorafrican[2:3],race_asian[2:3],race_hispoandlatino[2:3],education_high_school_graduates[2:3],education_some_college_degree[2:3],education_bachelor_degree[2:3],education_graduate_degree[2:3],poverty_below_100[2:3],poverty_100to149[2:3],poverty_150above[2:3])
+
+final_calculated_dt<-calculate_variable_district_year_wise(immigrant.all.years,varibles_for_mapping,table = "names")
+data_frame_for_crime<-list_df2df(crime_district_wise(crime.all.years))
+data_frame_for_leaflet<-list_df2df(final_calculated_dt)
+data_frame_for_leaflet<-left_join(data_frame_for_leaflet,as.data.frame(list_council_district_names),by="district")
+data_frame_for_leaflet<-left_join(data_frame_for_leaflet,data_frame_for_crime,by=c("district","X1"))
+
+colnames(data_frame_for_leaflet)[2]<-"DISTRICT"
+data_frame_for_leaflet$DISTRICT<-as.integer(data_frame_for_leaflet$DISTRICT)
+final_data<-data_frame_for_leaflet %>% gather(key = variable,value = value, -c("X1","DISTRICT","name")) %>% mutate_all(funs(ifelse(is.na(.), 0, .)))
+saveRDS(final_data,"~/R/Project 15/Data/Data_for_map.rds")
+
+saveRDS(crime_data_2010[sample(0:nrow(crime_data_2010),1000),],"~/R/Project 15/Data/crime2010.rds")
+saveRDS(crime_data_2011[sample(0:nrow(crime_data_2011),1000),],"~/R/Project 15/Data/crime2011.rds")
+saveRDS(crime_data_2012[sample(0:nrow(crime_data_2012),1000),],"~/R/Project 15/Data/crime2012.rds")
+saveRDS(crime_data_2013[sample(0:nrow(crime_data_2013),1000),],"~/R/Project 15/Data/crime2013.rds")
+saveRDS(crime_data_2014[sample(0:nrow(crime_data_2014),1000),],"~/R/Project 15/Data/crime2014.rds")
+saveRDS(crime_data_2015[sample(0:nrow(crime_data_2015),1000),],"~/R/Project 15/Data/crime2015.rds")
+saveRDS(crime_data_2016[sample(0:nrow(crime_data_2016),1000),],"~/R/Project 15/Data/crime2016.rds")
+```
+
+##Further Analysis on Crime Rate
+```{r Further_Analysis,echo=FALSE}
+result<-list_df2df(crime_district_wise(crime.all.years))
+result_population<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,c("S0701_C01_001E"),table = "names"))
+crime_rate<-left_join(result,result_population,by=c("X1","district"))
+crime_rate$rate<-round(as.integer(crime_rate$freq)*1000/as.integer(crime_rate$S0701_C01_001E))
+crime_rate<-crime_rate %>% select("X1","district","freq"="rate")
+```
+
+##regression analysis
+```{r Regression_model, echo=FALSE}
+
+regression_list_abroad<-calculate_variable_district_year_wise(immigrant.all.years,c(race_asian[3],race_blackorafrican[3],race_hispoandlatino[3]),table = "new")
+
+#Regression- Total Population of hispanic and latino race from abroad with Crime data (year wise and District wise)
+regression_hisp_abroad<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,race_hispoandlatino[3],table = "names"))
+regression_hispanic_abroad<-left_join(regression_hisp_abroad,crime_rate,by=c("X1","district"))
+model_hispanic_abroad<-lm(freq ~ race_abroad_hispanic,data=regression_hispanic_abroad)
+summary(model_hispanic_abroad)
+
+#Regression- Total Population of hispanic and latino race from different state within USA with Crime data (year wise and District wise)
+regression_hisp_state<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,race_hispoandlatino[2],table = "names"))
+regression_hispanic_state<-left_join(regression_hisp_state,crime_rate,by=c("X1","district"))
+model_hispanic_state<-lm(freq ~ . -X1 -district,data=regression_hispanic_state)
+summary(model_hispanic_state)
+
+#Regression- Total Population of hispanic and latino race from abroad & different state with Crime data (year wise and District wise)
+regression_hispanic<-left_join(regression_hisp_state,regression_hisp_abroad,by=c("X1","district")) %>% mutate(total=race_state_hispanic+race_abroad_hispanic)
+regression_hispanic<-left_join(regression_hispanic,crime_rate,by=c("X1","district"))
+model_hispanic<-lm(freq ~ total,data=regression_hispanic)
+summary(model_hispanic)
+
+#Regression- Total Population of asian race from abroad with Crime data (year wise and District wise)
+regression_asian_abroad<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,race_asian[3],table = "names"))
+regression_asian_abroad<-left_join(regression_asian_abroad,crime_rate,by=c("X1","district"))
+model_asian_abroad<-lm(freq ~ . -X1 -district,data=regression_asian_abroad)
+summary(model_asian_abroad)
+
+#Regression- Total Population of black and african race from abroad with Crime data (year wise and District wise)
+regression_black_abroad<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,race_blackorafrican[3],table = "names"))
+regression_black_abroad<-left_join(regression_black_abroad,crime_rate,by=c("X1","district"))
+model_black_abroad<-lm(freq ~ . -X1 -district,data=regression_black_abroad)
+summary(model_black_abroad)
+
+#Regression- Total Population of white race from abroad with Crime data (year wise and District wise)
+regression_white_abroad<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,race_white[3],table = "names"))
+regression_white_abroad<-left_join(regression_white_abroad,crime_rate,by=c("X1","district"))
+model_white_abroad<-lm(freq ~ . -X1 -district,data=regression_white_abroad)
+summary(model_white_abroad)
+
+#Regression- Total Population with high school education from abroad with Crime data (year wise and District wise)
+regression_high_abroad<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,education_high_school_graduates[3],table = "names"))
+regression_high_abroad<-left_join(regression_high_abroad,crime_rate,by=c("X1","district"))
+model_high_abroad<-lm(freq ~ . -X1 -district,data=regression_high_abroad)
+summary(model_high_abroad)
+
+#Regression- Total Population with college education from abroad with Crime data (year wise and District wise)
+regression_college_abroad<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,education_some_college_degree[3],table = "names"))
+regression_college_abroad<-left_join(regression_college_abroad,crime_rate,by=c("X1","district"))
+model_college_abroad<-lm(freq ~ . -X1 -district,data=regression_college_abroad)
+summary(model_college_abroad)
+
+#Regression- Total Population with bachelor education from abroad with Crime data (year wise and District wise)
+regression_bachelor_abroad<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,education_bachelor_degree[3],table = "names"))
+regression_bbachelor_abroad<-left_join(regression_bachelor_abroad,crime_rate,by=c("X1","district"))
+model_bachelor_abroad<-lm(freq ~ . -X1 -district,data=regression_high_abroad)
+summary(model_bachelor_abroad)
+
+#Regression- Total Population with graduate education from abroad with Crime data (year wise and District wise)
+regression_graduate_abroad<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,education_graduate_degree[3],table = "names"))
+regression_graduate_abroad<-left_join(regression_graduate_abroad,crime_rate,by=c("X1","district"))
+model_graduate_abroad<-lm(freq ~ . -X1 -district,data=regression_graduate_abroad)
+summary(model_graduate_abroad)
+
+#Regression- Total Population with poverty below 100 from abroad with Crime data (year wise and District wise)
+regression_poverty100_abroad<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,poverty_below_100[3],table = "names"))
+regression_poverty100_abroad<-left_join(regression_poverty100_abroad,crime_rate,by=c("X1","district"))
+model_poverty100_abroad<-lm(freq ~ . -X1 -district,data=regression_poverty100_abroad)
+summary(model_poverty100_abroad)
+
+#Regression- Total Population with poverty from 100 to 149 from abroad with Crime data (year wise and District wise)
+regression_poverty149_abroad<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,poverty_100to149[3],table = "names"))
+regression_poverty149_abroad<-left_join(regression_poverty149_abroad,crime_rate,by=c("X1","district"))
+model_poverty149_abroad<-lm(freq ~ . -X1 -district,data=regression_poverty149_abroad)
+summary(model_poverty149_abroad)
+
+#Regression- Total Population with poverty above 150 from abroad with Crime data (year wise and District wise)
+regression_poverty150_abroad<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,poverty_150above[3],table = "names"))
+regression_poverty150_abroad<-left_join(regression_poverty150_abroad,crime_rate,by=c("X1","district"))
+model_poverty150_abroad<-lm(freq ~ . -X1 -district,data=regression_poverty150_abroad)
+summary(model_poverty150_abroad)
+
+#Regression- Total Population from abroad with Crime data (year wise and District wise)
+regression_population_abroad<-list_df2df(calculate_variable_district_year_wise(immigrant.all.years,c("S0701_C05_001E"),table = "names"))
+regression_population_abroad<-left_join(regression_population_abroad,crime_rate,by=c("X1","district"))
+model_population_abroad<-lm(freq ~ . -X1 -district,data=regression_population_abroad)
+summary(model_population_abroad)
+
+```
+
+

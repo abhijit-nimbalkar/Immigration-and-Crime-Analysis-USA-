@@ -1,0 +1,83 @@
+
+.outer {
+  position: fixed;
+  top: 41px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.map-title{
+  text-align:center;
+  font-family:"Open Sans";
+  font-size:25px;
+  color:white;
+}
+
+.nonouter{
+  background-color:white;
+  color:black;
+}
+
+label{
+  color:white;
+}
+
+.informationPanal{
+  height:180px;
+  margin-top:25px;
+  margin-left:25px;
+  border-bottom:1px solid #4A2424;
+}
+
+#scatterImmigrantCrime{
+  margin-bottom:20px;
+  color:white;
+  background-color:#0B0B0B;
+}
+
+.form-group{
+  font-family: "Open Sans, verdana, arial, sans-serif"; 
+  font-size: 20px; 
+  opacity: 1; 
+  font-weight:normal; 
+  margin-top:45px;
+  margin-left:45px;
+  color:white;
+}
+
+.container-fluid{
+  background-color:#851E19;
+}
+
+.navbar-default .navbar-brand{
+  color:white;
+  background-color:#851E19;
+  border-color:black;
+  font-weight:bold;
+}
+
+.navbar-default .navbar-nav>.active>a, .navbar-default .navbar-nav>.active>a:focus, .navbar-default .navbar-nav>.active>a:hover{
+  color:white;
+  background-color:#680D0E;
+}
+
+.navbar-default .navbar-nav>li>a{
+  color:white;
+}
+
+
+body, label, input, button, select { 
+  background-color:#0B0B0B;
+  font-family: "Open Sans, verdana, arial, sans-serif"; 
+  font-size: 20px; 
+  opacity: 1; 
+  font-weight:normal; 
+}
+h1, h2, h3, h4 { font-weight: 400;}
+
+.leaflet-container {
+  background-color: black;
+}
